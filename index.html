@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Círculo Trigonométrico – Ângulos Inteiros (0° a 360°)</title>
+    <style>
+        :root {
+            --bg: #0f0f1a;
+            --surface: #1a1a2e;
+            --text: #e0e0e0;
+            --text-secondary: #b0b0b0;
+            --sine: #ff5e5b;
+            --cosine: #4da6ff;
+            --tangent: #4ade80;
+            --gold: #f0c040;
+            --circle-stroke: #555;
+            --grid: #2a2a4a;
+            --panel-bg: rgba(22, 22, 42, 0.94);
+            --panel-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: radial-gradient(circle at 20% 20%, #1e1e3a, #0a0a18);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+            overflow-x: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            padding: 16px;
+            max-width: 730px;  /* reduzido mais 10% (era 810px) */
+            width: 100%;
+        }
+
+        .title-area {
+            text-align: center;
+        }
+        .title-area h1 {
+            font-size: 1.7rem;
+            font-weight: 700;
+            color: #fff;
+            letter-spacing: 0.5px;
+            margin: 0;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        }
+        .title-area .subtitle {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .canvas-wrapper {
+            position: relative;
+            background: var(--surface);
+            border-radius: 24px;
+            box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
+            overflow: hidden;
+            cursor: crosshair;
+            width: 100%;
+            max-width: 700px;  /* reduzido mais 10% (era 778px) */
+            aspect-ratio: 960 / 620;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+
+        .legend-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 24px;
+            justify-content: center;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            background: rgba(255,255,255,0.04);
+            padding: 8px 24px;
+            border-radius: 30px;
+            backdrop-filter: blur(6px);
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            flex-shrink: 0;
+            box-shadow: 0 0 10px currentColor;
+        }
+        .legend-dot.sine { background: var(--sine); color: var(--sine); }
+        .legend-dot.cosine { background: var(--cosine); color: var(--cosine); }
+        .legend-dot.tangent { background: var(--tangent); color: var(--tangent); }
+        .legend-dot.equiv { background: var(--gold); color: var(--gold); }
+
+        .tip {
+            font-size: 0.8rem;
+            color: #888;
+            text-align: center;
+            margin-top: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="title-area">
+            <h1>🔵 Círculo Trigonométrico Interativo</h1>
+            <p class="subtitle">Seno · Cosseno · Tangente — Ângulos inteiros (1° a 360°)</p>
+        </div>
+        <div class="canvas-wrapper" id="canvasWrapper">
+            <canvas id="trigCanvas"></canvas>
+        </div>
+        <div class="legend-row">
+            <span class="legend-item"><span class="legend-dot sine"></span> Seno</span>
+            <span class="legend-item"><span class="legend-dot cosine"></span> Cosseno</span>
+            <span class="legend-item"><span class="legend-dot tangent"></span> Tangente</span>
+            <span class="legend-item"><span class="legend-dot equiv"></span> Ângulos equivalentes</span>
+        </div>
+        <p class="tip">🖱️ Mova o mouse sobre o círculo — o ângulo será arredondado para o inteiro mais próximo</p>
+    </div>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('trigCanvas');
+            const ctx = canvas.getContext('2d');
+            const wrapper = document.getElementById('canvasWrapper');
+
+            // --- Parâmetros do círculo (serão definidos no redimensionamento) ---
+            let cx, cy, R;
+            let canvasW, canvasH;
+            let dpr = window.devicePixelRatio || 1;
+
+            // --- Estado ---
+            let currentAngleRad = Math.PI / 6; // 30°
+            let isDragging = false;
+            let mouseOnCanvas = false;
+            let mouseX = 0, mouseY = 0;
+
+            // --- Cores ---
+            const COLOR_SINE = '#ff5e5b';
+            const COLOR_COSINE = '#4da6ff';
+            const COLOR_TANGENT = '#4ade80';
+            const COLOR_GOLD = '#f0c040';
+            const COLOR_ACTIVE_POINT = '#ffffff';
+            const COLOR_GRID = 'rgba(255,255,255,0.06)';
+            const COLOR_AXIS = 'rgba(255,255,255,0.35)';
+            const COLOR_CIRCLE = 'rgba(255,255,255,0.5)';
+            const COLOR_TEXT_SEC = '#b0b0b0';
+            const COLOR_PANEL_BG = 'rgba(22, 23, 48, 0.92)';
+            const COLOR_PANEL_BORDER = 'rgba(255,255,255,0.12)';
+
+            function resize() {
+                const rect = wrapper.getBoundingClientRect();
+                const w = rect.width;
+                const h = rect.height;
+                dpr = Math.min(window.devicePixelRatio || 1, 2);
+                canvasW = Math.floor(w * dpr);
+                canvasH = Math.floor(h * dpr);
+                canvas.width = canvasW;
+                canvas.height = canvasH;
+                canvas.style.width = w + 'px';
+                canvas.style.height = h + 'px';
+
+                cx = Math.floor(w * 0.38 * dpr);
+                cy = Math.floor(h * 0.52 * dpr);
+                R = Math.floor(Math.min(w * 0.30, h * 0.44) * dpr);
+            }
+
+            function getCanvasPos(e) {
+                const rect = canvas.getBoundingClientRect();
+                return {
+                    x: (e.clientX - rect.left) * dpr,
+                    y: (e.clientY - rect.top) * dpr,
+                };
+            }
+
+            function getTouchPos(e) {
+                const rect = canvas.getBoundingClientRect();
+                const touch = e.touches[0] || e.changedTouches[0];
+                return {
+                    x: (touch.clientX - rect.left) * dpr,
+                    y: (touch.clientY - rect.top) * dpr,
+                };
+            }
+
+            function computeAngle(px, py) {
+                const dx = px - cx;
+                const dy = py - cy;
+                let rad = Math.atan2(-dy, dx);
+                if (rad < 0) rad += 2 * Math.PI;
+                return rad;
+            }
+
+            function updateAngleFromMouse(px, py) {
+                const dist = Math.hypot(px - cx, py - cy);
+                if (dist > 2 * dpr) {
+                    let rad = computeAngle(px, py);
+                    let deg = rad * 180 / Math.PI;
+                    deg = Math.round(deg);
+                    if (deg >= 360) deg = 0;
+                    currentAngleRad = deg * Math.PI / 180;
+                }
+            }
+
+            // --- Eventos ---
+            canvas.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                const pos = getCanvasPos(e);
+                mouseX = pos.x; mouseY = pos.y;
+                updateAngleFromMouse(pos.x, pos.y);
+            });
+            window.addEventListener('mousemove', (e) => {
+                const pos = getCanvasPos(e);
+                mouseX = pos.x; mouseY = pos.y;
+                mouseOnCanvas = true;
+                if (isDragging) {
+                    updateAngleFromMouse(pos.x, pos.y);
+                } else if (Math.hypot(pos.x - cx, pos.y - cy) < R * 1.8) {
+                    updateAngleFromMouse(pos.x, pos.y);
+                }
+            });
+            window.addEventListener('mouseup', () => { isDragging = false; });
+            canvas.addEventListener('mouseleave', () => { mouseOnCanvas = false; isDragging = false; });
+            canvas.addEventListener('mouseenter', (e) => {
+                mouseOnCanvas = true;
+                const pos = getCanvasPos(e);
+                mouseX = pos.x; mouseY = pos.y;
+            });
+            canvas.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                isDragging = true;
+                const pos = getTouchPos(e);
+                mouseX = pos.x; mouseY = pos.y;
+                updateAngleFromMouse(pos.x, pos.y);
+            }, { passive: false });
+            canvas.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                if (isDragging) {
+                    const pos = getTouchPos(e);
+                    mouseX = pos.x; mouseY = pos.y;
+                    updateAngleFromMouse(pos.x, pos.y);
+                }
+            }, { passive: false });
+            canvas.addEventListener('touchend', () => { isDragging = false; });
+            window.addEventListener('resize', () => { resize(); });
+
+            // --- Helpers de desenho ---
+            function drawLine(x1, y1, x2, y2, color, width = 2, dash = []) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.setLineDash(dash);
+                ctx.strokeStyle = color;
+                ctx.lineWidth = width;
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+                ctx.restore();
+            }
+            function drawCircle(x, y, r, color, fill = false, fillColor = null, lineWidth = 2) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, 2 * Math.PI);
+                if (fill && fillColor) { ctx.fillStyle = fillColor; ctx.fill(); }
+                ctx.strokeStyle = color;
+                ctx.lineWidth = lineWidth;
+                ctx.stroke();
+                ctx.restore();
+            }
+            function drawDot(x, y, radius, color, glowColor = null, glowRadius = 0) {
+                ctx.save();
+                if (glowColor && glowRadius > 0) {
+                    const grad = ctx.createRadialGradient(x, y, radius * 0.3, x, y, glowRadius);
+                    grad.addColorStop(0, glowColor);
+                    grad.addColorStop(1, 'transparent');
+                    ctx.fillStyle = grad;
+                    ctx.beginPath();
+                    ctx.arc(x, y, glowRadius, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.restore();
+            }
+            function drawText(text, x, y, color, fontSize, align = 'center', bold = false) {
+                ctx.save();
+                ctx.fillStyle = color;
+                ctx.font = `${bold ? 'bold ' : ''}${fontSize}px 'Inter', 'Segoe UI', system-ui, sans-serif`;
+                ctx.textAlign = align;
+                ctx.textBaseline = 'middle';
+                ctx.fillText(text, x, y);
+                ctx.restore();
+            }
+            function drawRoundedRect(x, y, w, h, r, fillColor, strokeColor = null, lineWidth = 1) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(x + r, y);
+                ctx.lineTo(x + w - r, y);
+                ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+                ctx.lineTo(x + w, y + h - r);
+                ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+                ctx.lineTo(x + r, y + h);
+                ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+                ctx.lineTo(x, y + r);
+                ctx.quadraticCurveTo(x, y, x + r, y);
+                ctx.closePath();
+                ctx.fillStyle = fillColor;
+                ctx.fill();
+                if (strokeColor) {
+                    ctx.strokeStyle = strokeColor;
+                    ctx.lineWidth = lineWidth;
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
+
+            // --- Desenho do painel elegante ---
+            function drawElegantPanel(panelX, panelY, panelW, panelH, radius, data) {
+                ctx.save();
+                ctx.shadowColor = 'rgba(0,0,0,0.6)';
+                ctx.shadowBlur = 18 * dpr;
+                ctx.shadowOffsetX = 2 * dpr;
+                ctx.shadowOffsetY = 4 * dpr;
+                drawRoundedRect(panelX, panelY, panelW, panelH, radius, COLOR_PANEL_BG, COLOR_PANEL_BORDER, 1.5);
+                ctx.restore();
+
+                let y = panelY + 18 * dpr;
+                const pad = 20 * dpr;
+                const lineH = 20 * dpr;
+
+                drawText('📐 VALORES ATUAIS', panelX + panelW/2, y, '#ffffff', 14 * dpr, 'center', true);
+                y += lineH * 1.5;
+                drawLine(panelX + pad, y, panelX + panelW - pad, y, 'rgba(255,255,255,0.1)', 1);
+                y += 12 * dpr;
+
+                drawText(`Ângulo`, panelX + pad, y, COLOR_TEXT_SEC, 11 * dpr, 'left');
+                drawText(`${data.angleDeg}°`, panelX + panelW - pad, y, '#ffffff', 13 * dpr, 'right', true);
+                y += lineH * 0.9;
+                drawText(`Radianos`, panelX + pad, y, COLOR_TEXT_SEC, 10 * dpr, 'left');
+                drawText(`${data.angleRad.toFixed(4)} rad`, panelX + panelW - pad, y, '#ccc', 11 * dpr, 'right');
+                y += lineH * 1.0;
+                drawText(`Quadrante`, panelX + pad, y, COLOR_TEXT_SEC, 10 * dpr, 'left');
+                drawText(`${data.quadrant}º`, panelX + panelW - pad, y, '#ccc', 11 * dpr, 'right');
+                y += lineH * 1.0;
+                drawText(`Âng. referência`, panelX + pad, y, COLOR_TEXT_SEC, 10 * dpr, 'left');
+                drawText(`${data.refAngle}°`, panelX + panelW - pad, y, COLOR_GOLD, 11 * dpr, 'right', true);
+                y += lineH * 1.4;
+                drawLine(panelX + pad, y, panelX + panelW - pad, y, 'rgba(255,255,255,0.08)', 1);
+                y += 12 * dpr;
+
+                drawText('sen(θ)', panelX + pad, y, COLOR_SINE, 12 * dpr, 'left', true);
+                const sineSign = data.sinVal >= 0 ? '+' : '−';
+                drawText(`${sineSign} ${Math.abs(data.sinVal).toFixed(4)}`, panelX + panelW - pad, y, COLOR_SINE, 13 * dpr, 'right', true);
+                y += lineH * 1.3;
+
+                drawText('cos(θ)', panelX + pad, y, COLOR_COSINE, 12 * dpr, 'left', true);
+                const cosSign = data.cosVal >= 0 ? '+' : '−';
+                drawText(`${cosSign} ${Math.abs(data.cosVal).toFixed(4)}`, panelX + panelW - pad, y, COLOR_COSINE, 13 * dpr, 'right', true);
+                y += lineH * 1.3;
+
+                drawText('tan(θ)', panelX + pad, y, COLOR_TANGENT, 12 * dpr, 'left', true);
+                let tanStr;
+                if (Math.abs(data.cosVal) < 0.005) tanStr = 'Indefinido (∞)';
+                else {
+                    const tanSign = data.tanVal >= 0 ? '+' : '−';
+                    tanStr = `${tanSign} ${Math.abs(data.tanVal).toFixed(4)}`;
+                }
+                drawText(tanStr, panelX + panelW - pad, y, COLOR_TANGENT, 13 * dpr, 'right', true);
+                y += lineH * 1.7;
+                drawLine(panelX + pad, y, panelX + panelW - pad, y, 'rgba(255,255,255,0.08)', 1);
+                y += 12 * dpr;
+
+                drawText('ÂNGULOS EQUIVALENTES', panelX + panelW/2, y, COLOR_GOLD, 11 * dpr, 'center', true);
+                y += lineH * 1.1;
+                drawText('(mesmo ângulo de referência)', panelX + panelW/2, y, 'rgba(240,192,64,0.5)', 9 * dpr, 'center');
+                y += lineH * 1.3;
+
+                data.equivAngles.forEach(e => {
+                    const isActive = e.isActive;
+                    const prefix = isActive ? '●' : '○';
+                    const col = isActive ? '#ffffff' : COLOR_GOLD;
+                    const sSign = e.sin >= 0 ? '+' : '−';
+                    const cSign = e.cos >= 0 ? '+' : '−';
+                    let tStr;
+                    if (Math.abs(e.cos) < 0.005) tStr = '∞';
+                    else {
+                        const tSign = e.tan >= 0 ? '+' : '−';
+                        tStr = `${tSign}${Math.abs(e.tan).toFixed(3)}`;
+                    }
+                    const text = `${prefix} ${e.deg}°  s${sSign} c${cSign} t=${tStr}`;
+                    drawText(text, panelX + pad + 6 * dpr, y, col, 10.5 * dpr, 'left', isActive);
+                    y += lineH * 0.9;
+                });
+            }
+
+            // --- Desenho principal ---
+            function draw(timestamp) {
+                ctx.clearRect(0, 0, canvasW, canvasH);
+
+                const angle = currentAngleRad;
+                const angleDeg = Math.round(angle * 180 / Math.PI);
+                const sinVal = Math.sin(angle);
+                const cosVal = Math.cos(angle);
+                const tanVal = Math.tan(angle);
+
+                const px = cx + R * cosVal;
+                const py = cy - R * sinVal;
+
+                const bgGrad = ctx.createRadialGradient(cx, cy, R * 0.2, cx, cy, R * 1.9);
+                bgGrad.addColorStop(0, 'rgba(30,35,60,0.5)');
+                bgGrad.addColorStop(0.7, 'rgba(22,33,62,0.3)');
+                bgGrad.addColorStop(1, 'rgba(10,15,30,0.8)');
+                ctx.fillStyle = bgGrad;
+                ctx.fillRect(0, 0, canvasW, canvasH);
+
+                ctx.save();
+                ctx.strokeStyle = COLOR_GRID;
+                ctx.lineWidth = 1;
+                for (let i = -4; i <= 4; i++) {
+                    const gx = cx + i * R / 4;
+                    ctx.beginPath(); ctx.moveTo(gx, cy - R - 40 * dpr); ctx.lineTo(gx, cy + R + 40 * dpr); ctx.stroke();
+                }
+                for (let i = -4; i <= 4; i++) {
+                    const gy = cy + i * R / 4;
+                    ctx.beginPath(); ctx.moveTo(cx - R - 40 * dpr, gy); ctx.lineTo(cx + R + 120 * dpr, gy); ctx.stroke();
+                }
+                ctx.restore();
+
+                drawLine(cx - R - 35 * dpr, cy, cx + R + 110 * dpr, cy, COLOR_AXIS, 1.8);
+                drawLine(cx, cy - R - 35 * dpr, cx, cy + R + 35 * dpr, COLOR_AXIS, 1.8);
+
+                const arrowSize = 8 * dpr;
+                ctx.fillStyle = COLOR_AXIS;
+                ctx.beginPath();
+                ctx.moveTo(cx + R + 110 * dpr, cy);
+                ctx.lineTo(cx + R + 110 * dpr - arrowSize, cy - arrowSize * 0.55);
+                ctx.lineTo(cx + R + 110 * dpr - arrowSize, cy + arrowSize * 0.55);
+                ctx.closePath(); ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - R - 35 * dpr);
+                ctx.lineTo(cx - arrowSize * 0.55, cy - R - 35 * dpr + arrowSize);
+                ctx.lineTo(cx + arrowSize * 0.55, cy - R - 35 * dpr + arrowSize);
+                ctx.closePath(); ctx.fill();
+
+                drawText('x (cos)', cx + R + 95 * dpr, cy - 14 * dpr, COLOR_TEXT_SEC, 12 * dpr, 'center');
+                drawText('y (sen)', cx + 16 * dpr, cy - R - 25 * dpr, COLOR_TEXT_SEC, 12 * dpr, 'left');
+
+                drawCircle(cx, cy, R, COLOR_CIRCLE, false, null, 2.5);
+
+                const markAnglesDeg = [0,30,45,60,90,120,135,150,180,210,225,240,270,300,315,330];
+                const markAnglesRad = markAnglesDeg.map(d => d * Math.PI/180);
+                markAnglesRad.forEach((a,i) => {
+                    const deg = markAnglesDeg[i];
+                    const txi = cx + (R-4*dpr) * Math.cos(a);
+                    const tyi = cy - (R-4*dpr) * Math.sin(a);
+                    const txo = cx + (R+10*dpr) * Math.cos(a);
+                    const tyo = cy - (R+10*dpr) * Math.sin(a);
+                    drawLine(txi, tyi, txo, tyo, deg%90===0 ? 'rgba(255,255,255,0.7)':'rgba(255,255,255,0.35)', deg%90===0?2.2:1.2);
+                    if ([0,30,45,60,90,120,135,150,180,210,225,240,270,300,315,330].includes(deg)){
+                        const lx = cx + (R+22*dpr) * Math.cos(a);
+                        const ly = cy - (R+22*dpr) * Math.sin(a);
+                        drawText(deg+'°', lx, ly, COLOR_TEXT_SEC, 10*dpr, 'center');
+                    }
+                });
+                drawText('360° / 0', cx + R + 28*dpr, cy-4*dpr, COLOR_TEXT_SEC, 10*dpr, 'left');
+
+                const qLabels = ['I','II','III','IV'];
+                const qAngles = [Math.PI/4, 3*Math.PI/4, 5*Math.PI/4, 7*Math.PI/4];
+                qLabels.forEach((ql,i) => {
+                    drawText(ql, cx+R*0.55*Math.cos(qAngles[i]), cy-R*0.55*Math.sin(qAngles[i]), 'rgba(255,255,255,0.15)', 28*dpr, 'center', true);
+                });
+
+                let quadrant = angleDeg < 90 ? 1 : angleDeg < 180 ? 2 : angleDeg < 270 ? 3 : 4;
+                let refAngle = quadrant===1 ? angleDeg : quadrant===2 ? 180-angleDeg : quadrant===3 ? angleDeg-180 : 360-angleDeg;
+                refAngle = Math.round(refAngle);
+
+                const equivSet = new Set();
+                const equivList = [refAngle, 180-refAngle, 180+refAngle, 360-refAngle].map(d => {
+                    let v = d % 360;
+                    if (v < 0) v += 360;
+                    return Math.round(v);
+                }).filter(d => { const k = Math.round(d); if(equivSet.has(k)) return false; equivSet.add(k); return true; });
+
+                equivList.forEach(eDeg => {
+                    if (Math.abs(eDeg - angleDeg) < 0.5 && equivList.length>1) return;
+                    const eRad = eDeg * Math.PI/180;
+                    const ex = cx + R * Math.cos(eRad);
+                    const ey = cy - R * Math.sin(eRad);
+                    if (Math.hypot(ex-px, ey-py) < 3*dpr && equivList.length>1) return;
+                    drawDot(ex, ey, 6*dpr, COLOR_GOLD, 'rgba(240,192,64,0.5)', 14*dpr);
+                });
+
+                const projX_x = cx + R * cosVal, projX_y = cy;
+                ctx.save(); ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(px,py); ctx.lineTo(projX_x,projX_y); ctx.closePath();
+                ctx.fillStyle = 'rgba(255,94,91,0.06)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,94,91,0.2)'; ctx.lineWidth=1; ctx.setLineDash([4,4]); ctx.stroke(); ctx.restore();
+                const projY_x = cx, projY_y = cy - R * sinVal;
+                ctx.save(); ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(px,py); ctx.lineTo(projY_x,projY_y); ctx.closePath();
+                ctx.fillStyle = 'rgba(77,166,255,0.06)'; ctx.fill(); ctx.strokeStyle = 'rgba(77,166,255,0.2)'; ctx.lineWidth=1; ctx.setLineDash([4,4]); ctx.stroke(); ctx.restore();
+
+                drawLine(px,py, projX_x,projX_y, COLOR_SINE, 2.5, [6,4]);
+                drawDot(projX_x, projX_y, 5*dpr, COLOR_SINE, 'rgba(255,94,91,0.6)', 12*dpr);
+                drawLine(px,py, projY_x,projY_y, COLOR_COSINE, 2.5, [6,4]);
+                drawDot(projY_x, projY_y, 5*dpr, COLOR_COSINE, 'rgba(77,166,255,0.6)', 12*dpr);
+
+                if (Math.abs(sinVal)>0.005) drawLine(cx-8*dpr, cy-R*sinVal, cx+8*dpr, cy-R*sinVal, COLOR_SINE, 2);
+                if (Math.abs(cosVal)>0.005) drawLine(cx+R*cosVal, cy-8*dpr, cx+R*cosVal, cy+8*dpr, COLOR_COSINE, 2);
+
+                const tanLineX = cx + R;
+                drawLine(tanLineX, cy-R-25*dpr, tanLineX, cy+R+25*dpr, 'rgba(255,255,255,0.25)', 1.5, [5,5]);
+                drawText('tan', tanLineX+10*dpr, cy-R-18*dpr, 'rgba(255,255,255,0.4)', 10*dpr, 'left');
+                const tanY = cy - R * tanVal;
+                if (Math.abs(cosVal)>0.02 && Math.abs(tanY-cy) < R*2.8) {
+                    if (cosVal>0) drawLine(cx,cy, tanLineX, tanY, COLOR_TANGENT, 2.2, [2,3]);
+                    else drawLine(tanLineX, tanY, px, py, COLOR_TANGENT, 2.2, [2,3]);
+                    drawDot(tanLineX, tanY, 5.5*dpr, COLOR_TANGENT, 'rgba(74,222,128,0.7)', 14*dpr);
+                    drawText(tanVal.toFixed(4), tanLineX+16*dpr, tanY, COLOR_TANGENT, 11*dpr, 'left', true);
+                } else if (Math.abs(cosVal)<=0.02) {
+                    drawText('tan → ∞', tanLineX+14*dpr, cy, 'rgba(255,150,150,0.8)', 11*dpr, 'left', true);
+                }
+
+                drawLine(cx,cy, px,py, 'rgba(255,255,255,0.6)', 2.5);
+                drawDot(px, py, 9*dpr, COLOR_ACTIVE_POINT, 'rgba(255,255,255,0.8)', 22*dpr);
+                drawCircle(px, py, 12*dpr, 'rgba(255,255,255,0.7)', false, null, 2.5);
+
+                const arcR = 30*dpr;
+                ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, arcR, -angle, 0, true);
+                ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth=2; ctx.stroke(); ctx.restore();
+
+                const panelX = cx + R + 50*dpr;
+                const panelY = cy - R + 8*dpr;
+                const panelW = Math.min(270*dpr, canvasW - panelX - 25*dpr);
+                const panelH = 340*dpr;
+                if (panelW > 110*dpr) {
+                    const panelData = {
+                        angleDeg, angleRad: angle,
+                        quadrant, refAngle,
+                        sinVal, cosVal, tanVal,
+                        equivAngles: equivList.map(eDeg => {
+                            const eRad = eDeg * Math.PI/180;
+                            return {
+                                deg: eDeg,
+                                sin: Math.sin(eRad),
+                                cos: Math.cos(eRad),
+                                tan: Math.tan(eRad),
+                                isActive: Math.abs(eDeg - angleDeg) < 0.5
+                            };
+                        })
+                    };
+                    drawElegantPanel(panelX, panelY, panelW, panelH, 14*dpr, panelData);
+                }
+
+                if (isDragging) drawText('🖱️ Arrastando...', cx, cy - R - 42*dpr, 'rgba(255,255,255,0.7)', 12*dpr, 'center');
+            }
+
+            function animate(timestamp) {
+                draw(timestamp);
+                requestAnimationFrame(animate);
+            }
+
+            resize();
+            requestAnimationFrame(animate);
+        })();
+    </script>
+</body>
+</html>
